@@ -7,7 +7,6 @@ readonly MRUSTC_DIR="${INSTALL_DIR}/mrustc"
 readonly SDK_ROOT="${INSTALL_DIR}/esp8266-arduino"
 readonly TOOLCHAIN_ROOT="${HOME}/.platformio/packages/toolchain-xtensa"
 readonly PROJECT_DIR="${PWD}"
-readonly GENERATED_C_SRC="${MRUSTC_DIR}/output/lib$( basename "${PROJECT_DIR}" | sed 's/-/_/g' ).hir.o.c"
 
 function main() {
     install_toolchain
@@ -92,6 +91,8 @@ pub fn loop_rs() {
 }
 EOF
 	fi
+    local crate_name="$( egrep '^name\b' Cargo.toml  | cut -f2 -d'"' )"
+    readonly GENERATED_C_SRC="${MRUSTC_DIR}/output/lib$( echo "${crate_name}" | sed 's/-/_/g' ).hir.o.c"
 	if ! [[ -d bindings ]]; then
 		mkdir bindings
 	fi
