@@ -48,8 +48,8 @@ function install_toolchain() {
     echo 'Building Rust std library with mrustc'
     ( cd "${MRUSTC_DIR}/tools" && ./build_rustc_with_minicargo.sh )
     if ! [[ -d "${SDK_ROOT}" ]]; then
-		git clone https://github.com/esp8266/Arduino/ "${SDK_ROOT}"
-	fi
+        git clone https://github.com/esp8266/Arduino/ "${SDK_ROOT}"
+    fi
     if ! [[ -d "${TOOLCHAIN_ROOT}" ]]; then
         echo 'Installing ESP8266 Arduino SDK...'
         platformio platform install espressif8266
@@ -64,7 +64,7 @@ function init_project() {
     if ! [[ -e Cargo.toml ]]; then
         echo 'Initializing Cargo project...'
         cargo init
-		echo 'bindings = { path = "bindings" }' >> Cargo.toml
+        echo 'bindings = { path = "bindings" }' >> Cargo.toml
         echo 'Generating src/lib.rs'
         cat > src/lib.rs <<EOF
 #![no_std]
@@ -90,24 +90,31 @@ pub fn loop_rs() {
     }
 }
 EOF
-	fi
+    fi
     local crate_name="$( egrep '^name\b' Cargo.toml  | cut -f2 -d'"' )"
     readonly GENERATED_C_SRC="${MRUSTC_DIR}/output/lib$( echo "${crate_name}" | sed 's/-/_/g' ).hir.o.c"
-	if ! [[ -d bindings ]]; then
-		mkdir bindings
-	fi
-	if ! [[ -e bindings/Cargo.toml ]]; then
-		echo 'Initializing bindings crate'
-		cargo init bindings
-		echo 'libc = { path = "../libc", default-features = false }' >> bindings/Cargo.toml
+    if ! [[ -d bindings ]]; then
+        mkdir bindings
     fi
-	if ! [[ -d libc ]]; then
-		echo 'Creating symlink to libc'
-		ln -s "${MRUSTC_DIR}/rustc-nightly/src/vendor/libc" libc
-	fi
+    if ! [[ -e bindings/Cargo.toml ]]; then
+        echo 'Initializing bindings crate'
+        cargo init bindings
+        echo 'libc = { path = "../libc", default-features = false }' >> bindings/Cargo.toml
+    fi
+    if ! [[ -d libc ]]; then
+        echo 'Creating symlink to libc'
+        ln -s "${MRUSTC_DIR}/rustc-nightly/src/vendor/libc" libc
+    fi
+    if ! [[ -e includes.h ]]; then
+        echo 'Generating includes.h'
+        cat > includes.h <<'EOF'
+#include <Esp.h>
+EOF
+    fi
     if ! [[ -e src/main.ino ]]; then
         echo 'Generating src/main.ino'
         cat > src/main.ino <<EOF
+#include "../includes.h"
 #include "${GENERATED_C_SRC}"
 void setup() {
     setup_rs();
@@ -121,26 +128,79 @@ EOF
 }
 
 function generate_bindings() {
-	( cd "${SDK_ROOT}" && \
-		bindgen \
-		   --use-core \
-		   --ctypes-prefix libc \
-		   --rustfmt-bindings \
-		   --raw-line '#![no_std]' \
-		   --raw-line '#![allow(non_snake_case,non_camel_case_types,non_upper_case_globals)]' \
-		   --raw-line 'extern crate libc;' \
-		   cores/esp8266/Esp.h \
-		   -- \
-		   -I"${TOOLCHAIN_ROOT}/lib/gcc/xtensa-lx106-elf/4.8.2/include" \
-		   -Itools/sdk/libc/xtensa-lx106-elf/include \
-		   -Itools/sdk/include \
-		   -Ivariants/nodemcu \
-		   -Icores/esp8266 \
-		   -x c++ \
-		   -std=c++14 \
-		   -nostdinc \
+    # Find out which bindings are needed by deleting the contents of the
+    # bindings crate, then running cargo to get errors for missing items.
+    local whitelist_args=()
+    echo > bindings/src/lib.rs
+    readarray -t whitelist_args < <(
+        python2 - <(cargo build --message-format=json 2>/dev/null) <<'EOF'
+import json
+import re
+import sys
+
+_RE = re.compile('cannot find ([^ ]+) `([^`]+)` in this scope')
+_TYPE_MAP = {
+    'type': 'type',
+    'function': 'function',
+    'value': 'var',
+}
+
+with open(sys.argv[1]) as input:
+    for line in input:
+        if not line.startswith('{'):
+            continue
+        data = json.loads(line)
+        if 'message' not in data:
+            continue
+        match = _RE.match(data['message']['message'])
+        if not match:
+            continue
+        # TODO: Handle values nested in types (replace _ with .?)
+        print '--whitelist-%s=%s' % (_TYPE_MAP[match.group(1)], match.group(2))
+EOF
+    )
+
+    # Use platformio to get compiler flags and include dirs.
+    local extra_args=()
+    readarray -t extra_args < <(
+        python2 - <(platformio run -t idedata) <<'EOF'
+import json
+import sys
+
+with open(sys.argv[1]) as input:
+    for line in input:
+        if line.startswith('{'):
+            data = json.loads(line)
+            for include in data['includes']:
+                print '-I' + include
+            for flag in data['cxx_flags'].split():
+                if flag[:2] != '-m':
+                    print flag
+            break
+EOF
+    )
+
+    ( cd "${SDK_ROOT}" && \
+        set -x &&
+        bindgen \
+           --use-core \
+           --ctypes-prefix libc \
+           --rustfmt-bindings \
+           --raw-line '#![no_std]' \
+           --raw-line '#![allow(non_snake_case,non_camel_case_types,non_upper_case_globals)]' \
+           --raw-line 'extern crate libc;' \
+           --output "${PROJECT_DIR}/bindings/src/lib.rs" \
+           "${whitelist_args[@]}" \
+           "${PROJECT_DIR}/includes.h" \
+           -- \
+           -x c++ \
+           -nostdinc \
            -m32 \
-		   > "${PROJECT_DIR}/bindings/src/lib.rs" )
+           -I"${TOOLCHAIN_ROOT}/xtensa-lx106-elf/include/c++/4.8.2" \
+           -I"${TOOLCHAIN_ROOT}/xtensa-lx106-elf/include/c++/4.8.2/xtensa-lx106-elf" \
+           -Itools/sdk/libc/xtensa-lx106-elf/include \
+           "${extra_args[@]}" )
+    # TODO: Figure out how to automatically derive the hardcoded -I flags above
 }
 
 
@@ -154,12 +214,12 @@ function compile_with_rustc() {
 function compile_woth_mrustc() {
     echo 'Transpiling project with mrustc'
     ( cd "${MRUSTC_DIR}" && \
-		tools/bin/minicargo "${PROJECT_DIR}" \
-	        --script-overrides script-overrides/nightly-2017-07-08/ \
-    	    --vendor-dir tools/output/ )
+        tools/bin/minicargo "${PROJECT_DIR}" \
+            --script-overrides script-overrides/nightly-2017-07-08/ \
+            --vendor-dir tools/output/ )
     sed -i '/stdatomic/d' "${GENERATED_C_SRC}"
     sed -i '/__int128/d' "${GENERATED_C_SRC}"
-	sed -ir '/uint128_t/,/^}$/d' "${GENERATED_C_SRC}"
+    sed -ir '/uint128_t/,/^}$/d' "${GENERATED_C_SRC}"
 }
 
 function compile_with_platformio() {

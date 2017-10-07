@@ -26,7 +26,6 @@ cd my-project
 ../esp-rs/build.sh
 ```
 
-
 ## Requirements
 
 - Host machine: Linux platform with rustup support installing Rust nightly and
