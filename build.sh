@@ -42,7 +42,8 @@ function install_toolchain() {
     if ! [[ -d "${MRUSTC_DIR}" ]]; then
         git clone 'https://github.com/thepowersgang/mrustc' "${MRUSTC_DIR}"
     fi
-    echo 'Building mrustc/minicargo'
+    echo 'Building mrustc/minicargo@05b8e0c'
+    ( cd "${MRUSTC_DIR}" && git checkout '05b8e0c' )
     touch "${MRUSTC_DIR}"/script-overrides/nightly-2017-07-08/build_rustc_{a,l,m,t}san.txt
     ( cd "${MRUSTC_DIR}" && make RUSTCSRC && make -f minicargo.mk )
     echo 'Building Rust std library with mrustc'
