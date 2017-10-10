@@ -5,14 +5,17 @@ the ESP8266 using the [Arduino library](https://github.com/esp8266/Arduino/).
 It also generates and compiles a simple skeleton firmware that blinks the
 builtin LED.
 
-**This is pre-alpha software. Contributions are welcome!**
+**This project is currently in alpha. Effort will be made to maintain backwards
+compatibility but there are not yet any guarantees.**
 
 The toolchain is:
 
 - The standard Rust toolchain, installed using [rustup](https://www.rustup.rs)
-- [bindgen](https://github.com/rust-lang-nursery/rust-bindgen) + [rustfmt](https://github.com/rust-lang-nursery/rustfmt)
+- [bindgen](https://github.com/rust-lang-nursery/rust-bindgen) +
+  [rustfmt](https://github.com/rust-lang-nursery/rustfmt)
 - [mrustc](https://github.com/thepowersgang/mrustc) Rust -> C compiler
-- [PlatformIO](http://platformio.org/) and its ESP8266 toolchain
+- [PlatformIO](http://platformio.org/) and the ESP8266 toolchain that it
+  installs
 
 ## Usage
 
@@ -26,16 +29,51 @@ cd my-project
 ../esp-rs/build.sh
 ```
 
+## Using C/C++ libraries
+
+The bindgen tool is used to automatically generate Rust bindings into the
+generated `bindings` crate for any Arduino/ESP SDK libraries you use, as well
+as dependencies listed in your `platformio.ini`. You can look at the generated
+Rust code directly in `bindings/src/lib.rs` or at the generated docs in
+`target/i686-unknown-linux-gnu/doc/bindings/index.html`. Note that bindgen is
+still a work in progress and it currently does not support some C/C++ features
+and, for reasons that are not yet clear (see #1), it does not generate some
+bindings that seem like they should be present.
+
+To avoid unnecessary bindgen failures and reduce the generated code, bindings
+are only generated for C types/functions/values that are referenced in your
+Rust code.  The whitelist is derived from error messages output by `cargo
+build` when the bindings crate is empty. Note that sometimes (such as enums) a
+generated binding may be in a different namespace than its C counterpart (such
+as enum values). The Rust compiler is typically able to suggest the proper
+`use` statement to add in such cases.
+
+
+## Using Rust libraries
+
+mrustc's minicargo currently (as of the version used by this project - if this
+has changed, see #5) support fetching dependencies from crates.io or GitHub so
+you must download them to your project directory yourself and provide the
+`path` in your `Cargo.toml`, as is done for `libc` in the generated project.
+
 ## Requirements
 
 - Host machine: Linux platform with rustup support installing Rust nightly and
   for \[cross-\]compiling to `i686-unknown-linux-gnu` (thas only been tested on
   `x86_64` with Ubuntu 16.04).
 - Software: The script will try to install all parts of the toolchain listed
-  above but you probably need to have a C toolchain already installed.
-- Dev board: NodeMCU v2 such as
+  above but you probably need to have a C toolchain already installed (see #6).
+- Dev board: The generated platformio project sets the board to to `nodemcuv2`.
+  It has only been tested on
   [these](https://www.banggood.com/Geekcreit-Doit-NodeMcu-Lua-ESP8266-ESP-12E-WIFI-Development-Board-p-985891.html)
-  (adapting to other ESP8266 boards would probably be trivial)
+  but adapting it to other ESP8266 boards would probably be trivial - it may
+  not require changes at all)
+
+## Contributing
+
+Pull requests are welcome! See the open issues for ideas or just try building
+an interesting firmware and fix whatever doesn't work or could be better along
+the way. Please try to maintain the existing coding style and code defensively.
 
 ## Caveats
 
