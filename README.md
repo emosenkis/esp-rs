@@ -29,6 +29,18 @@ cd my-project
 ../esp-rs/build.sh
 ```
 
+## News
+
+Subscribe to the [forum
+thread](https://users.rust-lang.org/t/rust-on-esp8266/12933) for updates.
+
+- **10 October 2017**\
+  Over the last past few days, the script has been greatly improved. Generating
+  bindings should work for all Arduino/ESP SDK libraries as well as
+  dependencies listed in `platformio.ini`. Whitelisting is used for bindgen to
+  avoid bloat and unnecessary failures. Documentation has been greatly
+  expanded.
+
 ## Using C/C++ libraries
 
 The bindgen tool is used to automatically generate Rust bindings into the
