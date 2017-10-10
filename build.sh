@@ -105,16 +105,9 @@ EOF
         echo 'Creating symlink to libc'
         ln -s "${MRUSTC_DIR}/rustc-nightly/src/vendor/libc" libc
     fi
-    if ! [[ -e includes.h ]]; then
-        echo 'Generating includes.h'
-        cat > includes.h <<'EOF'
-#include <Esp.h>
-EOF
-    fi
     if ! [[ -e src/main.ino ]]; then
         echo 'Generating src/main.ino'
         cat > src/main.ino <<EOF
-#include "../includes.h"
 #include "${GENERATED_C_SRC}"
 void setup() {
     setup_rs();
@@ -138,12 +131,7 @@ import json
 import re
 import sys
 
-_RE = re.compile('cannot find ([^ ]+) `([^`]+)` in this scope')
-_TYPE_MAP = {
-    'type': 'type',
-    'function': 'function',
-    'value': 'var',
-}
+_RE = re.compile('cannot find [^ ]+ `([^`]+)` in this scope')
 
 with open(sys.argv[1]) as input:
     for line in input:
@@ -155,8 +143,10 @@ with open(sys.argv[1]) as input:
         match = _RE.match(data['message']['message'])
         if not match:
             continue
-        # TODO: Handle values nested in types (replace _ with .?)
-        print '--whitelist-%s=%s' % (_TYPE_MAP[match.group(1)], match.group(2))
+        name = match.group(1)
+        print '--whitelist-type=' + name
+        print '--whitelist-function=' + name
+        print '--whitelist-var=' + name
 EOF
     )
 
@@ -191,7 +181,9 @@ EOF
            --raw-line 'extern crate libc;' \
            --output "${PROJECT_DIR}/bindings/src/lib.rs" \
            "${whitelist_args[@]}" \
-           "${PROJECT_DIR}/includes.h" \
+           <( echo '#include <Esp.h>' \
+              && grep '^#include ' "${PROJECT_DIR}/src/main.ino" \
+                  | grep -vF "${GENERATED_C_SRC}" ) \
            -- \
            -x c++ \
            -nostdinc \
