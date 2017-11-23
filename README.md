@@ -17,22 +17,49 @@ The toolchain is:
 - [PlatformIO](http://platformio.org/) and the ESP8266 toolchain that it
   installs
 
-## Usage
+## Installation
 
-Clone the repository, create a project directory, and run the script. The first
-time will take a while since it needs to compile `mrustc`.
+This will take a while since it needs to compile `mrustc`.
 
 ```
 git clone https://github.com/emosenkis/esp-rs.git
+esp-rs/build.sh --install
+```
+
+## Updating
+
+This may take a while also if `mrustc` needs to be recompiled. If, for some
+reason, updating to the latest version fails, you can delete the `~/.esp-rs`
+directory and try again for a clean install.
+
+```
+cd ~/esp-rs
+git pull
+./build.sh --install
+```
+
+## Usage
+
+Create a project directory, and run the script. When run for the first time in
+a directory, it will generate a skeleton project.
+
+```
 mkdir my-project
 cd my-project
-../esp-rs/build.sh
+~/esp-rs/build.sh
 ```
 
 ## News
 
 Subscribe to the [forum
 thread](https://users.rust-lang.org/t/rust-on-esp8266/12933) for updates.
+
+- **23 November 2017**\
+  The biggest improvement in this version is placing the generated C files
+  inside the project dir instead of in the mrustc installation dir. mrustc is
+  also updated to the latest version and the ESP8266 Arduino SDK is pinned to a
+  specific commit. The `--install` flag is added to avoid running the
+  installation steps every time.
 
 - **10 October 2017**\
   Over the last past few days, the script has been greatly improved. Generating

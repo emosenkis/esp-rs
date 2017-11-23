@@ -2,7 +2,8 @@
 
 set -e -u -o pipefail
 
-readonly MRUSTC_VER='05b8e0c'
+readonly MRUSTC_VER='bffed50'
+readonly SDK_VER='5b92569'
 
 readonly INSTALL_DIR="${HOME}/.esp-rs"
 readonly MRUSTC_DIR="${INSTALL_DIR}/mrustc"
@@ -11,7 +12,20 @@ readonly TOOLCHAIN_ROOT="${HOME}/.platformio/packages/toolchain-xtensa"
 readonly PROJECT_DIR="${PWD}"
 
 function main() {
-    install_toolchain
+    if [[ "${1:-}" == '--install' ]]; then
+        install_toolchain
+        exit
+    elif ! (
+        rustup --version \
+        && bindgen --version \
+        && which rustfmt \
+        && platformio --version \
+        && [[ -x "${MRUSTC_DIR}/tools/bin/minicargo" ]] \
+        && [[ -d "${TOOLCHAIN_ROOT}" ]] \
+        ) &>/dev/null; then
+            echo 'Installation does not seem to be complete. Try running with --install.'
+            exit 1
+    fi
     init_project
     generate_bindings
     compile_with_rustc
@@ -29,9 +43,9 @@ function install_toolchain() {
         echo 'Installing bindgen...'
         rustup run nightly cargo install bindgen
     fi
-    if ! rustfmt --version &>/dev/null; then
+    if ! which rustfmt &>/dev/null; then
         echo 'Installing rustfmt...'
-        cargo install rustfmt
+        rustup run nightly cargo install rustfmt-nightly
     fi
     if ! platformio --version &>/dev/null; then
         echo 'Installing platformio...'
@@ -41,22 +55,30 @@ function install_toolchain() {
         mkdir "${INSTALL_DIR}"
     fi
 
-    if ! [[ -d "${MRUSTC_DIR}" ]]; then
-        git clone 'https://github.com/thepowersgang/mrustc' "${MRUSTC_DIR}"
-    fi
+    checkout_git_revision 'https://github.com/thepowersgang/mrustc.git' "${MRUSTC_VER}" "${MRUSTC_DIR}" 'mrustc'
     echo "Building mrustc/minicargo@${MRUSTC_VER}"
-    ( cd "${MRUSTC_DIR}" && git checkout "${MRUSTC_VER}" )
-    touch "${MRUSTC_DIR}"/script-overrides/nightly-2017-07-08/build_rustc_{a,l,m,t}san.txt
     ( cd "${MRUSTC_DIR}" && make RUSTCSRC && make -f minicargo.mk )
-    echo 'Building Rust std library with mrustc'
-    ( cd "${MRUSTC_DIR}/tools" && ./build_rustc_with_minicargo.sh )
-    if ! [[ -d "${SDK_ROOT}" ]]; then
-        git clone https://github.com/esp8266/Arduino/ "${SDK_ROOT}"
-    fi
+    checkout_git_revision 'https://github.com/esp8266/Arduino.git' "${SDK_VER}" "${SDK_ROOT}" 'ESP8266 Arduino SDK'
     if ! [[ -d "${TOOLCHAIN_ROOT}" ]]; then
-        echo 'Installing ESP8266 Arduino SDK...'
+        echo 'Installing PlatformIO ESP8266 Arduino SDK...'
         platformio platform install espressif8266
     fi
+}
+
+function checkout_git_revision() {
+    local REPO_URL="$1"
+    local COMMIT="$2"
+    local TARGET_DIR="$3"
+    local NAME="$4"
+    if [[ -d "${TARGET_DIR}" ]]; then
+        if ! ( cd "${TARGET_DIR}" && git rev-parse --verify --quiet "${COMMIT}" > /dev/null ); then
+            echo "Fetching ${NAME} revision ${COMMIT}"
+            ( cd "${TARGET_DIR}" && git fetch origin ) || echo "Failed to fetch ${NAME} revision ${COMMIT}."
+        fi
+    else
+        git clone "${REPO_URL}" "${TARGET_DIR}"
+    fi
+    ( cd "${TARGET_DIR}" && git checkout "${COMMIT}" . )
 }
 
 function init_project() {
@@ -94,8 +116,16 @@ pub fn loop_rs() {
 }
 EOF
     fi
-    local crate_name="$( egrep '^name\b' Cargo.toml  | cut -f2 -d'"' )"
-    readonly GENERATED_C_SRC="${MRUSTC_DIR}/output/lib$( echo "${crate_name}" | sed 's/-/_/g' ).hir.o.c"
+    local crate_name="$( egrep '^name\b' Cargo.toml | head -n1 | cut -f2 -d'"' )"
+    local crate_version="$( egrep '^version\b' Cargo.toml | head -n1 | cut -f2 -d'"' )"
+    readonly GENERATED_C_SRC_PREFIX="lib$( echo "${crate_name}" | sed 's/-/_/g' )"
+    readonly GENERATED_C_SRC="generated/${GENERATED_C_SRC_PREFIX}-$( echo "${crate_version}" | sed 's/\./_/g' ).hir.o.c"
+    if ! [[ -d generated ]]; then
+        mkdir generated
+    fi
+    if ! [[ -e "${GENERATED_C_SRC}" ]]; then
+        touch "${GENERATED_C_SRC}"
+    fi
     if ! [[ -d bindings ]]; then
         mkdir bindings
     fi
@@ -104,14 +134,16 @@ EOF
         cargo init bindings
         echo 'libc = { path = "../libc", default-features = false }' >> bindings/Cargo.toml
     fi
-    if ! [[ -d libc ]]; then
-        echo 'Creating symlink to libc'
-        ln -s "${MRUSTC_DIR}/rustc-nightly/src/vendor/libc" libc
+    ln -sfn "${MRUSTC_DIR}/rustc-1.19.0-src/src/vendor/libc" libc
+    if [[ -e Cargo.lock ]]; then
+        cargo update -p libc
     fi
-    if ! [[ -e src/main.ino ]]; then
+    if [[ -e src/main.ino ]]; then
+        sed -i 's@^#include ".*'"${GENERATED_C_SRC_PREFIX}"'.*hir.o.c"$@#include "../'"${GENERATED_C_SRC}"'"@' src/main.ino
+    else
         echo 'Generating src/main.ino'
         cat > src/main.ino <<EOF
-#include "${GENERATED_C_SRC}"
+#include "../${GENERATED_C_SRC}"
 void setup() {
     setup_rs();
 }
@@ -208,10 +240,10 @@ function compile_with_rustc() {
 
 function compile_woth_mrustc() {
     echo 'Transpiling project with mrustc'
-    ( cd "${MRUSTC_DIR}" && \
-        tools/bin/minicargo "${PROJECT_DIR}" \
-            --script-overrides script-overrides/nightly-2017-07-08/ \
-            --vendor-dir tools/output/ )
+    "${MRUSTC_DIR}"/tools/bin/minicargo "${PROJECT_DIR}" \
+        --script-overrides "${MRUSTC_DIR}"/script-overrides/stable-1.19.0-linux/ \
+        -L "${MRUSTC_DIR}"/output/ \
+        --output-dir "${PROJECT_DIR}"/generated/
     sed -i '/stdatomic/d' "${GENERATED_C_SRC}"
     sed -i '/__int128/d' "${GENERATED_C_SRC}"
     sed -ir '/uint128_t/,/^}$/d' "${GENERATED_C_SRC}"
@@ -222,4 +254,4 @@ function compile_with_platformio() {
     platformio run
 }
 
-main
+main "$@"
