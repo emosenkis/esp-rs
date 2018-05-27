@@ -54,6 +54,10 @@ cd my-project
 Subscribe to the [forum
 thread](https://users.rust-lang.org/t/rust-on-esp8266/12933) for updates.
 
+- **27 May 2018**\
+  Updated to Arduino SDK v2.4.1 and mrustc @b5b7089. You may need to delete
+  your `~/.esp-rs/mrustc` dir and try again if `./build.sh --install` fails.
+
 - **23 November 2017**\
   The biggest improvement in this version is placing the generated C files
   inside the project dir instead of in the mrustc installation dir. mrustc is

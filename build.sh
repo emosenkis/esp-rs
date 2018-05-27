@@ -2,8 +2,8 @@
 
 set -e -u -o pipefail
 
-readonly MRUSTC_VER='bffed50'
-readonly SDK_VER='5b92569'
+readonly MRUSTC_VER='b5b7089'
+readonly SDK_VER='2.4.1'
 
 readonly INSTALL_DIR="${HOME}/.esp-rs"
 readonly MRUSTC_DIR="${INSTALL_DIR}/mrustc"
