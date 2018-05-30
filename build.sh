@@ -90,6 +90,8 @@ function init_project() {
         echo 'Initializing Cargo project...'
         cargo init
         echo 'bindings = { path = "bindings" }' >> Cargo.toml
+    fi
+    if ! [[ -e src/lib.rs ]]; then
         echo 'Generating src/lib.rs'
         cat > src/lib.rs <<EOF
 #![no_std]
@@ -132,9 +134,12 @@ EOF
     if ! [[ -e bindings/Cargo.toml ]]; then
         echo 'Initializing bindings crate'
         cargo init bindings
-        echo 'libc = { path = "../libc", default-features = false }' >> bindings/Cargo.toml
+        echo 'libc = { path = "../vendor/libc", default-features = false }' >> bindings/Cargo.toml
     fi
-    ln -sfn "${MRUSTC_DIR}/rustc-1.19.0-src/src/vendor/libc" libc
+    if ! [[ -d vendor ]]; then
+        mkdir vendor
+    fi
+    ln -sfn "${MRUSTC_DIR}/rustc-1.19.0-src/src/vendor/libc" vendor/libc
     if [[ -e Cargo.lock ]]; then
         cargo update -p libc
     fi
@@ -243,6 +248,7 @@ function compile_woth_mrustc() {
     "${MRUSTC_DIR}"/tools/bin/minicargo "${PROJECT_DIR}" \
         --script-overrides "${MRUSTC_DIR}"/script-overrides/stable-1.19.0-linux/ \
         -L "${MRUSTC_DIR}"/output/ \
+        --vendor-dir "${PROJECT_DIR}"/vendor/ \
         --output-dir "${PROJECT_DIR}"/generated/
     sed -i '/stdatomic/d' "${GENERATED_C_SRC}"
     sed -i '/__int128/d' "${GENERATED_C_SRC}"

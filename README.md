@@ -54,6 +54,10 @@ cd my-project
 Subscribe to the [forum
 thread](https://users.rust-lang.org/t/rust-on-esp8266/12933) for updates.
 
+- **30 May 2018**\
+  Added support for Rust dependencies in the `vendor` subdirectory (see
+  [`cargo-vendor`](https://github.com/alexcrichton/cargo-vendor)
+
 - **27 May 2018**\
   Updated to Arduino SDK v2.4.1 and mrustc @b5b7089. You may need to delete
   your `~/.esp-rs/mrustc` dir and try again if `./build.sh --install` fails.
@@ -96,8 +100,9 @@ as enum values). The Rust compiler is typically able to suggest the proper
 
 mrustc's minicargo currently (as of the version used by this project - if this
 has changed, see #5) support fetching dependencies from crates.io or GitHub so
-you must download them to your project directory yourself and provide the
-`path` in your `Cargo.toml`, as is done for `libc` in the generated project.
+you must download them to the `vendor` subdirectory of your project directory.
+This can be done automatically by running the [`cargo-vendor`
+tool](https://github.com/alexcrichton/cargo-vendor) in your project directory.
 
 ## Requirements
 
