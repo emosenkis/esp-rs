@@ -17,6 +17,45 @@ The toolchain is:
 - [PlatformIO](http://platformio.org/) and the ESP8266 toolchain that it
   installs
 
+## Blink
+
+```rust
+#![no_std]
+
+extern crate embedded_hal;
+extern crate esp8266_hal;
+extern crate libc;
+
+mod bindings;
+use bindings::*;
+use embedded_hal::prelude::*;
+
+pub struct State {
+    led: esp8266_hal::OutputPin,
+}
+
+#[no_mangle]
+pub fn setup_rs() -> State {
+    State {
+        led: esp8266_hal::OutputPin::new(LED_BUILTIN as u8),
+    }
+}
+
+#[no_mangle]
+pub fn loop_rs(state: &mut State) {
+    state.led.set_low();
+    delay_rs(500);
+    state.led.set_high();
+    delay_rs(500);
+}
+
+fn delay_rs(millis: libc::c_ulong) {
+    unsafe {
+        delay(millis);
+    }
+}
+```
+
 ## Installation
 
 This will take a while since it needs to compile `mrustc`.
@@ -53,6 +92,28 @@ cd my-project
 
 Subscribe to the [forum
 thread](https://users.rust-lang.org/t/rust-on-esp8266/12933) for updates.
+
+- **14 June 2018**\
+  Added default dependency on new
+  [`embedded-hal`](https://github.com/japaric/embedded-hal) implementation crate
+  [`esp8266-hal`](https://github.com/emosenkis/esp8266-hal) (feel free to
+  both from your `Cargo.toml` if you don't want to use them).
+
+  Changed signature of `setup_rs` and `loop_rs` functions to facilitate
+  maintaining state. Now `setup_rs` returns a `State` struct and `loop_rs`
+  receives a `&mut State`.
+
+  Moved generated bindings from a separate crate to a module. Included `cargo
+  vendor` as part of the script. Switched to using libc from crates.io instead
+  of from mrustc.
+
+  Fixed handling of Rust dependencies. This has been tested to work on
+  PlatformIO 3.6.0a1 - try updating PlatformIO or fixing the
+  `.esp-rs-compiled-lib` symlink in your project dir if you get linker errors.
+
+  **This version makes backwards-incompatible changes to the project's layout
+  and code structure. It's probably worth starting in a new directory and
+  letting the script initialize it, then copy over your code.**
 
 - **30 May 2018**\
   Added support for Rust dependencies in the `vendor` subdirectory (see
@@ -98,11 +159,11 @@ as enum values). The Rust compiler is typically able to suggest the proper
 
 ## Using Rust libraries
 
-mrustc's minicargo currently (as of the version used by this project - if this
-has changed, see #5) support fetching dependencies from crates.io or GitHub so
-you must download them to the `vendor` subdirectory of your project directory.
-This can be done automatically by running the [`cargo-vendor`
-tool](https://github.com/alexcrichton/cargo-vendor) in your project directory.
+mrustc's minicargo does not currently support fetching dependencies from
+crates.io or GitHub so libraries included in your `Cargo.toml` will
+automatically be downloaded to the `vendor` subdirectory of your project
+directory by [`cargo-vendor`](https://github.com/alexcrichton/cargo-vendor).
+Cargo and minicargo will both be configured to look for dependencies there.
 
 ## Requirements
 
@@ -111,11 +172,11 @@ tool](https://github.com/alexcrichton/cargo-vendor) in your project directory.
   `x86_64` with Ubuntu 16.04).
 - Software: The script will try to install all parts of the toolchain listed
   above but you probably need to have a C toolchain already installed (see #6).
+  You may need to update PlatformIO to >=3.6.0a1.
 - Dev board: The generated platformio project sets the board to to `nodemcuv2`.
   It has only been tested on
   [these](https://www.banggood.com/Geekcreit-Doit-NodeMcu-Lua-ESP8266-ESP-12E-WIFI-Development-Board-p-985891.html)
-  but adapting it to other ESP8266 boards would probably be trivial - it may
-  not require changes at all)
+  but adapting it to other ESP8266 boards would probably be trivial.
 
 ## Contributing
 

@@ -41,11 +41,15 @@ function install_toolchain() {
     rustup target add i686-unknown-linux-gnu
     if ! bindgen --version &>/dev/null; then
         echo 'Installing bindgen...'
-        rustup run nightly cargo install bindgen
+        cargo +nightly install bindgen
     fi
     if ! which rustfmt &>/dev/null; then
         echo 'Installing rustfmt...'
-        rustup run nightly cargo install rustfmt-nightly
+        rustup component add rustfmt-preview
+    fi
+    if ! which cargo-vendor &>/dev/null; then
+        echo 'Installing cargo-vendor...'
+        cargo install cargo-vendor
     fi
     if ! platformio --version &>/dev/null; then
         echo 'Installing platformio...'
@@ -86,34 +90,54 @@ function init_project() {
         echo 'Initializing PlatformIO project...'
         platformio init -b nodemcuv2
     fi
+    if ! [[ -e .esp-rs-compiled-lib ]]; then
+        ln -s .pioenvs/nodemcuv2/libc72 .esp-rs-compiled-lib
+    fi
+    if ! grep -q libgenerated platformio.ini; then
+        echo "build_flags = '-L.esp-rs-compiled-lib -llibgenerated'" >> platformio.ini
+    fi
     if ! [[ -e Cargo.toml ]]; then
         echo 'Initializing Cargo project...'
         cargo init
-        echo 'bindings = { path = "bindings" }' >> Cargo.toml
+        echo 'embedded-hal = { version = "0.2.1", features = ["unproven"] }' >> Cargo.toml
+        echo 'esp8266-hal = "0.0.1"' >> Cargo.toml
+        echo 'libc = { version = "0.2.22", default-features = false }' >> Cargo.toml
     fi
-    if ! [[ -e src/lib.rs ]]; then
+    if ! grep -qs no_std src/lib.rs ; then
         echo 'Generating src/lib.rs'
         cat > src/lib.rs <<EOF
 #![no_std]
 
-extern crate bindings;
+extern crate embedded_hal;
+extern crate esp8266_hal;
+extern crate libc;
 
+mod bindings;
 use bindings::*;
+use embedded_hal::prelude::*;
+
+pub struct State {
+    led: esp8266_hal::OutputPin,
+}
 
 #[no_mangle]
-pub fn setup_rs() {
-    unsafe {
-        pinMode(LED_BUILTIN, OUTPUT as u8);
+pub fn setup_rs() -> State {
+    State {
+        led: esp8266_hal::OutputPin::new(LED_BUILTIN as u8),
     }
 }
 
 #[no_mangle]
-pub fn loop_rs() {
+pub fn loop_rs(state: &mut State) {
+    state.led.set_low();
+    delay_rs(500);
+    state.led.set_high();
+    delay_rs(500);
+}
+
+fn delay_rs(millis: libc::c_ulong) {
     unsafe {
-        digitalWrite(LED_BUILTIN, LOW as u8);
-        delay(1000);
-        digitalWrite(LED_BUILTIN, HIGH as u8);
-        delay(2000);
+        delay(millis);
     }
 }
 EOF
@@ -121,40 +145,49 @@ EOF
     local crate_name="$( egrep '^name\b' Cargo.toml | head -n1 | cut -f2 -d'"' )"
     local crate_version="$( egrep '^version\b' Cargo.toml | head -n1 | cut -f2 -d'"' )"
     readonly GENERATED_C_SRC_PREFIX="lib$( echo "${crate_name}" | sed 's/-/_/g' )"
-    readonly GENERATED_C_SRC="generated/${GENERATED_C_SRC_PREFIX}-$( echo "${crate_version}" | sed 's/\./_/g' ).hir.o.c"
-    if ! [[ -d generated ]]; then
-        mkdir generated
+    readonly GENERATED_HIR="lib/generated/${GENERATED_C_SRC_PREFIX}-$( echo "${crate_version}" | sed 's/\./_/g' ).hir"
+    readonly GENERATED_C_SRC="${GENERATED_HIR}.o.c"
+    if ! [[ -d lib/generated ]]; then
+        mkdir -p lib/generated
+    fi
+    if ! [[ -e lib/generated/generated.h ]]; then
+        touch lib/generated/generated.h
     fi
     if ! [[ -e "${GENERATED_C_SRC}" ]]; then
         touch "${GENERATED_C_SRC}"
     fi
-    if ! [[ -d bindings ]]; then
-        mkdir bindings
+    cargo vendor
+    if ! [[ -d .cargo ]]; then
+        mkdir -p .cargo
     fi
-    if ! [[ -e bindings/Cargo.toml ]]; then
-        echo 'Initializing bindings crate'
-        cargo init bindings
-        echo 'libc = { path = "../vendor/libc", default-features = false }' >> bindings/Cargo.toml
-    fi
-    if ! [[ -d vendor ]]; then
-        mkdir vendor
-    fi
-    ln -sfn "${MRUSTC_DIR}/rustc-1.19.0-src/src/vendor/libc" vendor/libc
-    if [[ -e Cargo.lock ]]; then
-        cargo update -p libc
+    if ! [[ -e .cargo/config ]]; then
+        cat > .cargo/config <<EOF
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+directory = "vendor"
+EOF
     fi
     if [[ -e src/main.ino ]]; then
         sed -i 's@^#include ".*'"${GENERATED_C_SRC_PREFIX}"'.*hir.o.c"$@#include "../'"${GENERATED_C_SRC}"'"@' src/main.ino
     else
         echo 'Generating src/main.ino'
         cat > src/main.ino <<EOF
-#include "../${GENERATED_C_SRC}"
+// Include an empty header to make platformio compile the generated code
+#include <generated.h>
+extern "C" {
+    #include "../${GENERATED_C_SRC}"
+}
+
+decltype(setup_rs()) main;
+
 void setup() {
-    setup_rs();
+    main = setup_rs();
 }
 
 void loop() {
-    loop_rs();
+    loop_rs(&main);
 }
 EOF
     fi
@@ -164,7 +197,7 @@ function generate_bindings() {
     # Find out which bindings are needed by deleting the contents of the
     # bindings crate, then running cargo to get errors for missing items.
     local whitelist_args=()
-    echo > bindings/src/lib.rs
+    echo > src/bindings.rs
     readarray -t whitelist_args < <(
         python2 - <(cargo build --message-format=json 2>/dev/null) <<'EOF'
 import json
@@ -216,14 +249,13 @@ EOF
            --use-core \
            --ctypes-prefix libc \
            --rustfmt-bindings \
-           --raw-line '#![no_std]' \
            --raw-line '#![allow(non_snake_case,non_camel_case_types,non_upper_case_globals)]' \
            --raw-line 'extern crate libc;' \
-           --output "${PROJECT_DIR}/bindings/src/lib.rs" \
+           --output "${PROJECT_DIR}/src/bindings.rs" \
            "${whitelist_args[@]}" \
            <( echo '#include <Esp.h>' \
               && grep '^#include ' "${PROJECT_DIR}/src/main.ino" \
-                  | grep -vF "${GENERATED_C_SRC}" ) \
+                  | grep -ve '"generated/.*\.hir.o.c"' ) \
            -- \
            -x c++ \
            -nostdinc \
@@ -237,22 +269,22 @@ EOF
 
 
 function compile_with_rustc() {
-    echo 'Building project with rustc to run checks'
-    cargo build --target i686-unknown-linux-gnu
-    echo 'Building docs with rustc'
-    cargo doc --target i686-unknown-linux-gnu
+    echo 'Running cargo check'
+    cargo check --target i686-unknown-linux-gnu
 }
 
 function compile_woth_mrustc() {
     echo 'Transpiling project with mrustc'
+    # Delete the previous generated files to ensure mrustc builds them again.
+    rm -f lib/generated/*.hir*
     "${MRUSTC_DIR}"/tools/bin/minicargo "${PROJECT_DIR}" \
         --script-overrides "${MRUSTC_DIR}"/script-overrides/stable-1.19.0-linux/ \
         -L "${MRUSTC_DIR}"/output/ \
         --vendor-dir "${PROJECT_DIR}"/vendor/ \
-        --output-dir "${PROJECT_DIR}"/generated/
-    sed -i '/stdatomic/d' "${GENERATED_C_SRC}"
-    sed -i '/__int128/d' "${GENERATED_C_SRC}"
-    sed -ir '/uint128_t/,/^}$/d' "${GENERATED_C_SRC}"
+        --output-dir "${PROJECT_DIR}"/lib/generated/
+    sed -i '/stdatomic/d' lib/generated/*.hir.o.c
+    sed -i '/__int128/d' lib/generated/*.hir.o.c
+    sed -ir '/uint128_t/,/^}$/d' lib/generated/*.hir.o.c
 }
 
 function compile_with_platformio() {
