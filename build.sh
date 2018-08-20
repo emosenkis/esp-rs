@@ -39,6 +39,10 @@ function install_toolchain() {
         curl https://sh.rustup.rs -sSf | sh
     fi
     rustup target add i686-unknown-linux-gnu
+    if ! rustup toolchain list | grep -q nightly; then
+        echo 'Installing nightly toolchain...'
+        rustup toolchain install nightly
+    fi
     if ! bindgen --version &>/dev/null; then
         echo 'Installing bindgen...'
         cargo +nightly install bindgen
