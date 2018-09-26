@@ -57,7 +57,7 @@ function install_toolchain() {
     fi
     if ! platformio --version &>/dev/null; then
         echo 'Installing platformio...'
-        pip install platformio
+        pip install platformio --user
     fi
     if ! [[ -d "${INSTALL_DIR}" ]]; then
         mkdir "${INSTALL_DIR}"
