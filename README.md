@@ -85,7 +85,7 @@ a directory, it will generate a skeleton project.
 ```
 mkdir my-project
 cd my-project
-~/esp-rs/build.sh
+/where/you/cloned/esp-rs/build.sh
 ```
 
 ## News
