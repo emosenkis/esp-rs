@@ -105,7 +105,7 @@ function init_project() {
         cargo init
         echo 'embedded-hal = { version = "0.2.1", features = ["unproven"] }' >> Cargo.toml
         echo 'esp8266-hal = "0.0.1"' >> Cargo.toml
-        echo 'libc = { version = "0.2.22", default-features = false }' >> Cargo.toml
+        echo 'libc = { version = "=0.2.42", default-features = false }' >> Cargo.toml
     fi
     if ! grep -qs no_std src/lib.rs ; then
         echo 'Generating src/lib.rs'
