@@ -64,6 +64,7 @@ This will take a while since it needs to compile `mrustc`.
 git clone https://github.com/emosenkis/esp-rs.git
 esp-rs/build.sh --install
 ```
+Note: Under MacOS it is possible in some cases that the Python path is not set correctly. So plattformio is installed but not found. This must be fixed manually, e.g. by adding the /etc/paths.d/python.
 
 ## Updating
 
