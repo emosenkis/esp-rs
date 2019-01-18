@@ -66,6 +66,8 @@ esp-rs/build.sh --install
 ```
 Note: Under MacOS it is possible in some cases that the Python path is not set correctly. So plattformio is installed but not found. This must be fixed manually, e.g. by adding the /etc/paths.d/python.
 
+Note: Under MacOS it is possible that bash < 4.0 is installed. The build script requires Bash 4.0 functions.
+
 ## Updating
 
 This may take a while also if `mrustc` needs to be recompiled. If, for some
