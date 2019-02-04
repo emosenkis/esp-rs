@@ -1,7 +1,7 @@
 version: 2
 jobs:
   build:
-    working_directory: /
+    working_directory: /esp-rs
     docker:
       - image: docker:17.05.0-ce-git
     steps:
