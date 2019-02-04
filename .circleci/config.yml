@@ -11,3 +11,7 @@ jobs:
           name: Build image
           command: |
             docker build -t esp-rust .
+      - run:
+          name: Test image
+          command: |
+            docker run esp-rs /bin/bash -c "USER=tester ./build.sh test"
