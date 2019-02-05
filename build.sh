@@ -65,7 +65,7 @@ function install_toolchain() {
 
     checkout_git_revision 'https://github.com/thepowersgang/mrustc.git' "${MRUSTC_VER}" "${MRUSTC_DIR}" 'mrustc'
     echo "Building mrustc/minicargo@${MRUSTC_VER}"
-    ( cd "${MRUSTC_DIR}" && make RUSTCSRC && make -f minicargo.mk )
+    ( cd "${MRUSTC_DIR}" && make RUSTCSRC && make -f minicargo.mk PARLEVEL=$(nproc) LIBS )
     checkout_git_revision 'https://github.com/esp8266/Arduino.git' "${SDK_VER}" "${SDK_ROOT}" 'ESP8266 Arduino SDK'
     if ! [[ -d "${TOOLCHAIN_ROOT}" ]]; then
         echo 'Installing PlatformIO ESP8266 Arduino SDK...'
