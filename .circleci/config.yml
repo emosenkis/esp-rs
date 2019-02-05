@@ -10,7 +10,7 @@ jobs:
       - run:
           name: Build image
           command: |
-            docker build -t esp-rust .
+            docker build -t esp-rs .
       - run:
           name: Test image
           command: |

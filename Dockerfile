@@ -1,6 +1,6 @@
 FROM ubuntu:16.04
 
-RUN apt-get update && apt-get install -y git curl gcc libssl-dev pkg-config python-pip cmake llvm-3.9-dev libclang-3.9-dev clang-3.9
+RUN apt-get update && apt-get install -y git curl gcc libssl-dev pkg-config python-pip cmake llvm-3.9-dev libclang-3.9-dev clang-3.9 vim
 
 RUN curl https://sh.rustup.rs -sSf > rustup.sh && chmod +x rustup.sh
 RUN ./rustup.sh -y
