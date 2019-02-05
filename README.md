@@ -1,5 +1,7 @@
 # Rust on ESP8266
 
+[![CircleCI](https://circleci.com/gh/emosenkis/esp-rs.svg?style=svg)](https://circleci.com/gh/emosenkis/esp-rs)
+
 This script attempts to install the full toolchain needed to write firmware for
 the ESP8266 using the [Arduino library](https://github.com/esp8266/Arduino/).
 It also generates and compiles a simple skeleton firmware that blinks the
