@@ -1,0 +1,17 @@
+version: 2
+jobs:
+  build:
+    working_directory: /esp-rs
+    docker:
+      - image: docker:17.05.0-ce-git
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          name: Build image
+          command: |
+            docker build -t esp-rs .
+      - run:
+          name: Test image
+          command: |
+            docker run esp-rs /bin/bash -c "USER=tester ./build.sh test"
