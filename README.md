@@ -2,6 +2,11 @@
 
 [![CircleCI](https://circleci.com/gh/emosenkis/esp-rs.svg?style=svg)](https://circleci.com/gh/emosenkis/esp-rs)
 
+**Important: Since there is now a working Xtensa backend for LLVM, I am putting
+this project on hold. I encourage you to try to build on
+[existing work](http://quickhack.net/nom/blog/2019-05-14-build-rust-environment-for-esp32.html)
+towards compiling with rustc for ESP32.**
+
 This script attempts to install the full toolchain needed to write firmware for
 the ESP8266 using the [Arduino library](https://github.com/esp8266/Arduino/).
 It also generates and compiles a simple skeleton firmware that blinks the
